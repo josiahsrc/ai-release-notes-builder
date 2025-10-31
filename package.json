@@ -1,0 +1,23 @@
+{
+  "name": "ai-release-notes-builder",
+  "version": "1.0.0",
+  "description": "A github action that summarizes commits into release notes",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.js -o dist",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "github-action",
+    "release-notes",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.4"
+  }
+}
