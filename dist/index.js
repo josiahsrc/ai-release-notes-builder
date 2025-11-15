@@ -27562,6 +27562,11 @@ const MODELS_ENDPOINT = 'https://models.github.ai/inference/chat/completions';
 const DEFAULT_SYSTEM_PROMPT =
   'You are an expert technical writer who creates clear, concise, and actionable release notes for software changes.';
 
+function escapeShellArg(value) {
+  const text = String(value);
+  return `'${text.replace(/'/g, "'\\''")}'`;
+}
+
 function runCommand(command, options = {}) {
   core.debug(`Executing: ${command}`);
   return execSync(command, {
@@ -27599,8 +27604,12 @@ function readCommitBody(sha) {
   return runCommand(`git show -s --format=%b ${sha}`).trim();
 }
 
-function readCommitDiff(sha) {
-  return runCommand(`git show ${sha} --format=`); // Do not trim; diff formatting matters.
+function readCommitDiff(sha, diffPaths = []) {
+  const pathArgs =
+    diffPaths && diffPaths.length
+      ? ` -- ${diffPaths.map((path) => escapeShellArg(path)).join(' ')}`
+      : '';
+  return runCommand(`git show ${sha} --format=${pathArgs}`); // Do not trim; diff formatting matters.
 }
 
 function truncateContent(content, limit) {
@@ -27617,10 +27626,10 @@ function truncateContent(content, limit) {
   return { text, truncated: true };
 }
 
-function buildCommitSection(commit, maxDiffChars) {
+function buildCommitSection(commit, maxDiffChars, diffPaths = []) {
   const title = readCommitTitle(commit);
   const body = readCommitBody(commit);
-  const diff = readCommitDiff(commit);
+  const diff = readCommitDiff(commit, diffPaths);
   const truncated = truncateContent(diff, maxDiffChars);
 
   const sectionParts = [
@@ -27689,6 +27698,10 @@ async function run() {
     const systemPrompt = core.getInput('system_prompt') || DEFAULT_SYSTEM_PROMPT;
     const extraInstructions = core.getInput('extra_instructions');
     const customPrompt = core.getInput('prompt');
+    const diffPathsInput = core.getMultilineInput('paths');
+    const diffPaths = diffPathsInput
+      .map((value) => value.trim())
+      .filter(Boolean);
     const githubToken = process.env.GITHUB_TOKEN;
 
     if (!githubToken) {
@@ -27726,7 +27739,7 @@ async function run() {
 
     const commitSections = commitOrder.map((sha, index) => {
       core.info(`Collecting details for commit ${index + 1}/${commitOrder.length}: ${sha}`);
-      return buildCommitSection(sha, maxDiffChars);
+      return buildCommitSection(sha, maxDiffChars, diffPaths);
     });
 
     const promptParts = [];

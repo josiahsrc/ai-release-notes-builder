@@ -59,6 +59,7 @@ jobs:
 | `system_prompt` | Override the default system prompt. | *(empty)* |
 | `prompt` | Replace the default release-note instructions with a custom prompt. | *(empty)* |
 | `extra_instructions` | Additional instructions for the model. | *(empty)* |
+| `paths` | Optional newline-separated list of paths or glob patterns to limit which files appear in the diffs. | *(empty)* |
 
 You can combine `prompt` and `extra_instructions` to steer the tone or structure of the generated notes—for example, provide a prompt such as “Create a punchy changelog with emoji headings and a final callout for deployers.”
 
