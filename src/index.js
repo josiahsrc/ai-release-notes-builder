@@ -5,6 +5,52 @@ const MODELS_ENDPOINT = 'https://models.github.ai/inference/chat/completions';
 const DEFAULT_SYSTEM_PROMPT =
   'You are an expert technical writer who creates clear, concise, and actionable release notes for software changes.';
 
+const CONTENT_SCOPE = {
+  EVERYTHING: 'everything',
+  COMMIT_MESSAGES: 'commit_messages',
+  SOURCE_CODE: 'source_code',
+};
+
+const CONTENT_SCOPE_ALIASES = {
+  everything: CONTENT_SCOPE.EVERYTHING,
+  all: CONTENT_SCOPE.EVERYTHING,
+  default: CONTENT_SCOPE.EVERYTHING,
+  commit_messages: CONTENT_SCOPE.COMMIT_MESSAGES,
+  commit_message: CONTENT_SCOPE.COMMIT_MESSAGES,
+  commits: CONTENT_SCOPE.COMMIT_MESSAGES,
+  messages: CONTENT_SCOPE.COMMIT_MESSAGES,
+  source_code: CONTENT_SCOPE.SOURCE_CODE,
+  code: CONTENT_SCOPE.SOURCE_CODE,
+  diff: CONTENT_SCOPE.SOURCE_CODE,
+  diffs: CONTENT_SCOPE.SOURCE_CODE,
+};
+
+function normalizeContentScope(value) {
+  if (!value) {
+    return CONTENT_SCOPE.EVERYTHING;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  const resolved = CONTENT_SCOPE_ALIASES[normalized];
+
+  if (!resolved) {
+    const validOptions = Object.values(CONTENT_SCOPE).join(', ');
+    throw new Error(
+      `Invalid content_scope "${value}". Valid options are: ${validOptions}.`
+    );
+  }
+
+  return resolved;
+}
+
+function shouldIncludeCommitMessages(scope) {
+  return scope === CONTENT_SCOPE.EVERYTHING || scope === CONTENT_SCOPE.COMMIT_MESSAGES;
+}
+
+function shouldIncludeDiffs(scope) {
+  return scope === CONTENT_SCOPE.EVERYTHING || scope === CONTENT_SCOPE.SOURCE_CODE;
+}
+
 function escapeShellArg(value) {
   const text = String(value);
   return `'${text.replace(/'/g, "'\\''")}'`;
@@ -69,22 +115,27 @@ function truncateContent(content, limit) {
   return { text, truncated: true };
 }
 
-function buildCommitSection(commit, maxDiffChars, diffPaths = []) {
-  const title = readCommitTitle(commit);
-  const body = readCommitBody(commit);
-  const diff = readCommitDiff(commit, diffPaths);
-  const truncated = truncateContent(diff, maxDiffChars);
+function buildCommitSection(commit, { contentScope, maxDiffChars, diffPaths = [] }) {
+  const includeMessages = shouldIncludeCommitMessages(contentScope);
+  const includeDiff = shouldIncludeDiffs(contentScope);
+  const sectionParts = [`SHA: ${commit}`];
 
-  const sectionParts = [
-    `Commit: ${title}`,
-    `SHA: ${commit}`,
-  ];
+  if (includeMessages) {
+    const title = readCommitTitle(commit);
+    const body = readCommitBody(commit);
 
-  if (body) {
-    sectionParts.push(`Body:\n${body}`);
+    sectionParts.unshift(`Commit: ${title}`);
+
+    if (body) {
+      sectionParts.push(`Body:\n${body}`);
+    }
   }
 
-  sectionParts.push(`Diff:\n${truncated.text}`);
+  if (includeDiff) {
+    const diff = readCommitDiff(commit, diffPaths);
+    const truncated = truncateContent(diff, maxDiffChars);
+    sectionParts.push(`Diff:\n${truncated.text}`);
+  }
 
   return sectionParts.join('\n\n');
 }
@@ -141,6 +192,7 @@ async function run() {
     const systemPrompt = core.getInput('system_prompt') || DEFAULT_SYSTEM_PROMPT;
     const extraInstructions = core.getInput('extra_instructions');
     const customPrompt = core.getInput('prompt');
+    const contentScopeInput = core.getInput('content_scope') || CONTENT_SCOPE.EVERYTHING;
     const diffPathsInput = core.getMultilineInput('paths');
     const diffPaths = diffPathsInput
       .map((value) => value.trim())
@@ -151,6 +203,7 @@ async function run() {
       throw new Error('GITHUB_TOKEN environment variable is required to call GitHub Models API.');
     }
 
+    const contentScope = normalizeContentScope(contentScopeInput);
     const maxDiffChars = Number.parseInt(maxDiffCharsInput, 10);
     if (Number.isNaN(maxDiffChars) || maxDiffChars <= 0) {
       throw new Error(`"max_diff_chars" must be a positive integer. Received "${maxDiffCharsInput}".`);
@@ -182,7 +235,11 @@ async function run() {
 
     const commitSections = commitOrder.map((sha, index) => {
       core.info(`Collecting details for commit ${index + 1}/${commitOrder.length}: ${sha}`);
-      return buildCommitSection(sha, maxDiffChars, diffPaths);
+      return buildCommitSection(sha, {
+        contentScope,
+        maxDiffChars,
+        diffPaths,
+      });
     });
 
     const promptParts = [];

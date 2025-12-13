@@ -5,7 +5,7 @@ Generate polished release notes by summarizing commit diffs with GitHub Models d
 ## How It Works
 
 - Collects the commits between two SHAs (optionally including the starting commit).
-- Captures each commit title, body, and diff (truncated to a configurable length).
+- Captures each commit's messages, source diffs, or both depending on `content_scope`, truncating diffs to a configurable length.
 - Sends the collated context to the GitHub Models inference API and returns ready-to-paste release notes.
 
 ## Quick Start
@@ -60,6 +60,9 @@ jobs:
 | `prompt` | Replace the default release-note instructions with a custom prompt. | *(empty)* |
 | `extra_instructions` | Additional instructions for the model. | *(empty)* |
 | `paths` | Optional newline-separated list of paths or glob patterns to limit which files appear in the diffs. | *(empty)* |
+| `content_scope` | Choose whether to send `everything`, only `commit_messages`, or only `source_code` diffs. | `everything` |
+
+> `commit_messages` includes commit titles and bodies but skips diffs entirely, while `source_code` includes only the diff for each commit.
 
 You can combine `prompt` and `extra_instructions` to steer the tone or structure of the generated notes—for example, provide a prompt such as “Create a punchy changelog with emoji headings and a final callout for deployers.”
 
